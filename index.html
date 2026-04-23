@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeRoad AI - India Road Risk Prediction</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#050a12',
+                        fg: '#f0f4f8',
+                        muted: '#64748b',
+                        accent: '#06d6a0',
+                        secondary: '#118ab2',
+                        card: '#0a1628',
+                        border: '#1e3a5f',
+                        riskLow: '#06d6a0',
+                        riskMedium: '#ffd166',
+                        riskHigh: '#ef476f',
+                    },
+                    fontFamily: {
+                        display: ['Space Grotesk', 'sans-serif'],
+                        body: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        :root {
+            --bg: #050a12;
+            --fg: #f0f4f8;
+            --muted: #64748b;
+            --accent: #06d6a0;
+            --secondary: #118ab2;
+            --card: #0a1628;
+            --border: #1e3a5f;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            overflow-x: hidden;
+        }
+        
+        .bg-atmosphere {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.4;
+            animation: orbFloat 30s ease-in-out infinite;
+        }
+        
+        .orb-1 { width: 600px; height: 600px; background: linear-gradient(135deg, #06d6a0, #118ab2); top: -200px; right: -100px; }
+        .orb-2 { width: 500px; height: 500px; background: linear-gradient(135deg, #118ab2, #073b4c); bottom: -150px; left: -150px; animation-delay: -10s; }
+        .orb-3 { width: 400px; height: 400px; background: linear-gradient(135deg, #ef476f, #ffd166); top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: -20s; opacity: 0.2; }
+        
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -30px) scale(1.05); }
+        }
+        
+        .grid-pattern {
+            position: fixed; inset: 0;
+            background-image: linear-gradient(rgba(6, 214, 160, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 214, 160, 0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+            pointer-events: none; z-index: 1;
+        }
+        
+        h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+        
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #06d6a0, #118ab2); color: #050a12; font-weight: 600;
+            padding: 16px 36px; border-radius: 12px; border: none; cursor: pointer;
+            transition: all 0.3s ease; position: relative; overflow: hidden;
+            font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.02em;
+        }
+        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 10px 40px rgba(6, 214, 160, 0.4); }
+        
+        .btn-secondary {
+            background: transparent; border: 2px solid var(--border); color: var(--fg);
+            font-weight: 500; padding: 14px 32px; border-radius: 12px; cursor: pointer;
+            transition: all 0.3s ease; font-family: 'Space Grotesk', sans-serif;
+        }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); background: rgba(6, 214, 160, 0.05); }
+        
+        .card {
+            background: rgba(10, 22, 40, 0.8); backdrop-filter: blur(20px);
+            border: 1px solid var(--border); border-radius: 20px; padding: 28px;
+            transition: all 0.4s ease;
+        }
+        .card:hover { border-color: rgba(6, 214, 160, 0.4); transform: translateY(-4px); }
+        
+        .form-input, .form-select {
+            background: rgba(5, 10, 18, 0.9); border: 2px solid var(--border);
+            border-radius: 12px; padding: 16px 20px; color: var(--fg); width: 100%;
+            transition: all 0.3s ease; font-family: 'Outfit', sans-serif; font-size: 1rem;
+            appearance: none;
+        }
+        .form-input:focus, .form-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(6, 214, 160, 0.15); }
+        
+        #map { height: 450px; border-radius: 16px; border: 2px solid var(--border); }
+        
+        .stat-value {
+            font-size: 3rem; font-weight: 700;
+            background: linear-gradient(135deg, #06d6a0, #118ab2);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        
+        .alert-banner {
+            background: linear-gradient(135deg, rgba(239, 71, 111, 0.15), rgba(239, 71, 111, 0.05));
+            border: 1px solid rgba(239, 71, 111, 0.4); border-radius: 16px; padding: 20px 24px;
+            animation: alertPulse 3s ease-in-out infinite;
+        }
+        @keyframes alertPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 71, 111, 0.3); } 50% { box-shadow: 0 0 0 15px rgba(239, 71, 111, 0); } }
+        
+        .progress-track { height: 10px; background: rgba(30, 58, 95, 0.5); border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 5px; transition: width 0.8s ease; }
+        
+        .detection-card {
+            background: rgba(5, 10, 18, 0.6); border: 1px solid var(--border);
+            border-radius: 16px; padding: 20px; position: relative; overflow: hidden;
+        }
+        .detection-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--secondary));
+            transform: scaleX(0); transform-origin: left; transition: transform 0.5s ease;
+        }
+        .detection-card.detected::before { transform: scaleX(1); }
+        
+        .spinner { width: 48px; height: 48px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .risk-gauge { position: relative; width: 200px; height: 200px; }
+        .gauge-bg { fill: none; stroke: rgba(30, 58, 95, 0.5); stroke-width: 12; }
+        .gauge-fill { fill: none; stroke-width: 12; stroke-linecap: round; transition: stroke-dasharray 1.5s ease, stroke 0.5s ease; transform: rotate(-90deg); transform-origin: center; }
+        
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+        
+        .leaflet-container { background: #050a12; }
+        .leaflet-popup-content-wrapper { background: #0a1628; color: #f0f4f8; border-radius: 12px; border: 1px solid #1e3a5f; }
+        .leaflet-popup-tip { background: #0a1628; }
+        .leaflet-popup-content { font-family: 'Outfit', sans-serif; margin: 12px 16px; }
+        
+        /* Custom Select Arrow */
+        .select-wrapper { position: relative; }
+        .select-wrapper::after {
+            content: ''; position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+            width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent;
+            border-top: 6px solid var(--muted); pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-atmosphere"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+    <div class="grid-pattern"></div>
+    
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-bg/60 border-b border-border">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <a href="#" class="flex items-center gap-3 group">
+                <div class="relative w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg class="w-7 h-7 text-bg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                </div>
+                <div><span class="font-display font-bold text-xl block">SafeRoad AI</span><span class="text-xs text-muted">India Safety Network</span></div>
+            </a>
+            <div class="hidden md:flex items-center gap-8">
+                <a href="#predict" class="text-muted hover:text-fg transition-colors font-medium">Predict Risk</a>
+                <a href="#map-section" class="text-muted hover:text-fg transition-colors font-medium">Live Map</a>
+                <a href="#dashboard" class="text-muted hover:text-fg transition-colors font-medium">Dashboard</a>
+            </div>
+            <button class="btn-primary text-sm !py-3 !px-6 hidden sm:flex items-center gap-2" onclick="scrollToSection('predict')">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                Analyze Route
+            </button>
+        </div>
+    </nav>
+    
+    <!-- Hero Section -->
+    <section class="min-h-screen flex items-center justify-center relative pt-20 z-10">
+        <div class="max-w-7xl mx-auto px-6 py-20">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div class="reveal">
+                    <div class="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-accent/10 border border-accent/30 mb-8">
+                        <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-accent"></span></span>
+                        <span class="text-accent font-medium">Monitoring 10 Major Indian Cities</span>
+                    </div>
+                    <h1 class="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] mb-6">
+                        AI Road Safety
+                        <span class="block text-transparent bg-clip-text bg-gradient-to-r from-accent via-secondary to-cyan-400 mt-2">For Indian Roads</span>
+                    </h1>
+                    <p class="text-lg md:text-xl text-muted leading-relaxed mb-10 max-w-xl">Select your city to get instant risk prediction based on local weather, traffic density, and road conditions.</p>
+                    <div class="flex flex-wrap gap-4 mb-14">
+                        <button class="btn-primary text-lg flex items-center gap-3" onclick="scrollToSection('predict')">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Check City Safety
+                        </button>
+                        <button class="btn-secondary flex items-center gap-2" onclick="scrollToSection('dashboard')">View Dashboard<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-8 md:gap-12">
+                        <div class="text-center"><div class="stat-value text-3xl md:text-4xl" data-count="12847">0</div><div class="text-muted text-sm mt-1">Routes Analyzed</div></div>
+                        <div class="w-px h-16 bg-border"></div>
+                        <div class="text-center"><div class="stat-value text-3xl md:text-4xl" data-count="10">0</div><div class="text-muted text-sm mt-1">Major Cities</div></div>
+                        <div class="w-px h-16 bg-border hidden sm:block"></div>
+                        <div class="text-center hidden sm:block"><div class="stat-value text-3xl md:text-4xl" data-count="94">0</div><div class="text-muted text-sm mt-1">% Accuracy</div></div>
+                    </div>
+                </div>
+                
+                <div class="reveal" style="transition-delay: 0.2s">
+                    <div class="card p-0 overflow-hidden">
+                        <div class="p-4 border-b border-border flex items-center gap-3 bg-bg/50">
+                            <div class="flex gap-2"><div class="w-3 h-3 rounded-full bg-riskHigh"></div><div class="w-3 h-3 rounded-full bg-riskMedium"></div><div class="w-3 h-3 rounded-full bg-riskLow"></div></div>
+                            <span class="text-muted text-sm font-medium ml-2">Live Sample: Mumbai</span>
+                            <span class="ml-auto px-3 py-1 rounded-full bg-riskHigh/20 text-riskHigh text-xs font-medium">High Risk</span>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex items-start justify-between mb-6">
+                                <div><h3 class="font-display font-semibold text-xl">Mumbai Metropolitan</h3><p class="text-muted">Maharashtra</p></div>
+                                <div class="px-4 py-2 rounded-xl bg-riskHigh/20 text-riskHigh font-semibold">High Risk</div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4 mb-6">
+                                <div class="detection-card detected"><div class="flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg><span class="text-xs text-muted">Weather</span></div><p class="font-semibold text-riskMedium">Rain</p></div>
+                                <div class="detection-card detected"><div class="flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span class="text-xs text-muted">Traffic</span></div><p class="font-semibold text-riskHigh">High</p></div>
+                                <div class="detection-card detected"><div class="flex items-center gap-2 mb-2"><svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4"/></svg><span class="text-xs text-muted">Road</span></div><p class="font-semibold text-riskMedium">Waterlogging</p></div>
+                            </div>
+                            <div class="mb-6"><div class="flex justify-between mb-2"><span class="text-muted text-sm">Overall Risk Score</span><span class="font-bold text-riskHigh">85/100</span></div><div class="progress-track"><div class="progress-fill bg-gradient-to-r from-riskHigh to-orange-500" style="width: 85%"></div></div></div>
+                            <div class="alert-banner"><div class="flex items-start gap-4"><svg class="w-6 h-6 text-riskHigh flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><div><p class="font-semibold text-riskHigh">Monsoon Hazard</p><p class="text-sm text-muted mt-1">Extreme congestion + waterlogging reported. Avoid low-lying areas.</p></div></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Risk Prediction Section -->
+    <section id="predict" class="py-24 relative z-10">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 reveal">
+                <h2 class="font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">Predict Road Risk</h2>
+                <p class="text-lg md:text-xl text-muted max-w-2xl mx-auto">Select a city to see AI-predicted road conditions and risk factors specific to that region.</p>
+            </div>
+            
+            <div class="grid lg:grid-cols-5 gap-8 items-start">
+                <div class="lg:col-span-2 reveal">
+                    <div class="card">
+                        <h3 class="font-display font-semibold text-xl mb-6 flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center">
+                                <svg class="w-5 h-5 text-bg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            </div>
+                            Select Location
+                        </h3>
+                        
+                        <form id="location-form" class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-muted" for="city-select">Select City</label>
+                                <div class="select-wrapper">
+                                    <select id="city-select" class="form-select">
+                                        <option value="mumbai">Mumbai - Congestion + Flooding</option>
+                                        <option value="delhi">Delhi - Fog + Dense Traffic</option>
+                                        <option value="bengaluru">Bengaluru - Traffic + Potholes</option>
+                                        <option value="chennai" selected>Chennai - Rain + Coastal Flooding</option>
+                                        <option value="hyderabad">Hyderabad - Urban Growth + Mixed Roads</option>
+                                        <option value="kolkata">Kolkata - Waterlogging + Old Roads</option>
+                                        <option value="pune">Pune - Traffic + Bad Patches</option>
+                                        <option value="ahmedabad">Ahmedabad - Heat + Highways</option>
+                                        <option value="jaipur">Jaipur - Dust + Visibility</option>
+                                        <option value="guwahati">Guwahati - Floods + Hilly Roads</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-2 text-muted">Latitude</label>
+                                    <input type="text" id="lat-input" class="form-input" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-2 text-muted">Longitude</label>
+                                    <input type="text" id="lng-input" class="form-input" readonly>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 rounded-xl bg-accent/5 border border-accent/20">
+                                <div class="flex items-center gap-3 mb-2"><svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span class="font-medium text-accent">Region-Specific AI</span></div>
+                                <p class="text-sm text-muted">Model adapts to local monsoon patterns, traffic behaviors, and infrastructure quality.</p>
+                            </div>
+                            
+                            <button type="submit" class="btn-primary w-full flex items-center justify-center gap-3 text-lg">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                Analyze City Safety
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="lg:col-span-3 reveal" style="transition-delay: 0.15s">
+                    <div id="results-panel" class="card min-h-[500px]">
+                        <div class="flex flex-col items-center justify-center h-full text-center py-20">
+                            <div class="w-24 h-24 rounded-full bg-border/30 flex items-center justify-center mb-6">
+                                <svg class="w-12 h-12 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                            </div>
+                            <h3 class="font-display font-semibold text-xl mb-2">Select a City</h3>
+                            <p class="text-muted max-w-sm">Choose a city from the dropdown and click "Analyze City Safety" to see region-specific risk prediction.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Map Section -->
+    <section id="map-section" class="py-24 relative z-10">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 reveal">
+                <h2 class="font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">Live Risk Map - India</h2>
+                <p class="text-lg md:text-xl text-muted max-w-2xl mx-auto">Real-time monitoring of major metropolitan areas</p>
+            </div>
+            <div class="card reveal overflow-hidden p-0">
+                <div class="p-4 border-b border-border flex flex-wrap items-center justify-between gap-4 bg-bg/50">
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-riskLow"></span><span class="text-sm text-muted">Low Risk</span></div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-riskMedium"></span><span class="text-sm text-muted">Medium Risk</span></div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-riskHigh"></span><span class="text-sm text-muted">High Risk</span></div>
+                    </div>
+                    <button class="text-sm text-accent hover:text-fg transition-colors font-medium flex items-center gap-2" onclick="refreshMapData()"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>Refresh Data</button>
+                </div>
+                <div id="map" role="application" aria-label="Risk map showing road safety zones"></div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Dashboard Section -->
+    <section id="dashboard" class="py-24 relative z-10">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 reveal">
+                <h2 class="font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">National Authority Dashboard</h2>
+                <p class="text-lg md:text-xl text-muted max-w-2xl mx-auto">Aggregated safety metrics from connected cities</p>
+            </div>
+            
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-12">
+                <div class="card reveal text-center py-8 group"><div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg></div><div class="stat-value text-2xl md:text-3xl lg:text-4xl" data-count="9284">0</div><p class="text-muted mt-2">Total Alerts</p></div>
+                <div class="card reveal text-center py-8 group" style="transition-delay: 0.1s"><div class="w-14 h-14 rounded-2xl bg-riskHigh/10 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7 text-riskHigh" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div><div class="stat-value text-2xl md:text-3xl lg:text-4xl" data-count="147">0</div><p class="text-muted mt-2">Active Risk Zones</p></div>
+                <div class="card reveal text-center py-8 group" style="transition-delay: 0.2s"><div class="w-14 h-14 rounded-2xl bg-riskMedium/10 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7 text-riskMedium" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg></div><div class="stat-value text-2xl md:text-3xl lg:text-4xl" data-count="542">0</div><p class="text-muted mt-2">Potholes Reported</p></div>
+                <div class="card reveal text-center py-8 group" style="transition-delay: 0.3s"><div class="w-14 h-14 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div><div class="stat-value text-2xl md:text-3xl lg:text-4xl" data-count="10">0</div><p class="text-muted mt-2">Cities Connected</p></div>
+            </div>
+            
+            <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                <div class="card reveal"><h3 class="font-display font-semibold text-xl mb-6 flex items-center gap-3"><svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/></svg>Risk Distribution</h3><div class="space-y-6"><div><div class="flex justify-between mb-3"><span class="flex items-center gap-3"><span class="w-4 h-4 rounded-full bg-riskLow"></span><span class="font-medium">Low Risk</span></span><span class="text-riskLow font-bold text-lg">40%</span></div><div class="progress-track h-4"><div class="progress-fill bg-gradient-to-r from-riskLow to-emerald-400" style="width: 40%"></div></div></div><div><div class="flex justify-between mb-3"><span class="flex items-center gap-3"><span class="w-4 h-4 rounded-full bg-riskMedium"></span><span class="font-medium">Medium Risk</span></span><span class="text-riskMedium font-bold text-lg">35%</span></div><div class="progress-track h-4"><div class="progress-fill bg-gradient-to-r from-riskMedium to-amber-400" style="width: 35%"></div></div></div><div><div class="flex justify-between mb-3"><span class="flex items-center gap-3"><span class="w-4 h-4 rounded-full bg-riskHigh"></span><span class="font-medium">High Risk</span></span><span class="text-riskHigh font-bold text-lg">25%</span></div><div class="progress-track h-4"><div class="progress-fill bg-gradient-to-r from-riskHigh to-orange-500" style="width: 25%"></div></div></div></div></div>
+                <div class="card reveal" style="transition-delay: 0.15s"><h3 class="font-display font-semibold text-xl mb-6 flex items-center gap-3"><svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>Recent Alerts</h3><div class="space-y-3" id="alerts-list"></div></div>
+            </div>
+        </div>
+    </section>
+    
+    <footer class="py-16 border-t border-border relative z-10">
+        <div class="max-w-7xl mx-auto px-6 text-center text-muted">
+            <p>SafeRoad AI - Hackathon Project for Safer Indian Roads</p>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // ==========================================
+        // CITY DATA & PROFILES
+        // ==========================================
+        
+        const cityProfiles = {
+            mumbai: { name: "Mumbai", state: "Maharashtra", lat: 19.0760, lng: 72.8777, traits: ["rain", "flood", "high_traffic"], riskBias: 15, desc: "Extreme congestion + monsoon flooding" },
+            delhi: { name: "Delhi", state: "NCR", lat: 28.7041, lng: 77.1025, traits: ["fog", "high_traffic", "highway"], riskBias: 10, desc: "Fog + highways + dense traffic" },
+            bengaluru: { name: "Bengaluru", state: "Karnataka", lat: 12.9716, lng: 77.5946, traits: ["potholes", "high_traffic", "moderate_rain"], riskBias: 12, desc: "Traffic jams + potholes" },
+            chennai: { name: "Chennai", state: "Tamil Nadu", lat: 13.0827, lng: 80.2707, traits: ["rain", "flood", "heat"], riskBias: 8, desc: "Heavy rain + coastal flooding" },
+            hyderabad: { name: "Hyderabad", state: "Telangana", lat: 17.3850, lng: 78.4867, traits: ["mixed_roads", "moderate_traffic"], riskBias: 5, desc: "Fast urban growth + mixed road quality" },
+            kolkata: { name: "Kolkata", state: "West Bengal", lat: 22.5726, lng: 88.3639, traits: ["waterlogging", "old_roads", "moderate_traffic"], riskBias: 10, desc: "Waterlogging + old roads" },
+            pune: { name: "Pune", state: "Maharashtra", lat: 18.5204, lng: 73.8567, traits: ["potholes", "high_traffic"], riskBias: 8, desc: "Traffic + bad road patches" },
+            ahmedabad: { name: "Ahmedabad", state: "Gujarat", lat: 23.0225, lng: 72.5714, traits: ["heat", "highway"], riskBias: 3, desc: "Heat + highway connectivity" },
+            jaipur: { name: "Jaipur", state: "Rajasthan", lat: 26.9124, lng: 75.7873, traits: ["dust", "visibility"], riskBias: 5, desc: "Dust + visibility issues" },
+            guwahati: { name: "Guwahati", state: "Assam", lat: 26.1445, lng: 91.7362, traits: ["flood", "hilly", "rain"], riskBias: 12, desc: "Flood-prone + hilly roads" }
+        };
+
+        const mapLocations = Object.keys(cityProfiles).map(key => {
+            const c = cityProfiles[key];
+            const baseScore = 30 + (c.riskBias || 0);
+            const randomScore = Math.min(95, Math.max(15, baseScore + Math.floor(Math.random() * 30) - 15));
+            return {
+                id: key, name: c.name, lat: c.lat, lng: c.lng, 
+                risk: randomScore > 65 ? "high" : randomScore > 35 ? "medium" : "low",
+                score: randomScore
+            };
+        });
+
+        const recentAlerts = [
+            { location: "Mumbai", type: "high", message: "Waterlogging reported at Andheri subway", time: "2 min ago" },
+            { location: "Delhi", type: "high", message: "Dense fog reducing visibility on NH-48", time: "10 min ago" },
+            { location: "Bengaluru", type: "medium", message: "Heavy traffic on Outer Ring Road", time: "18 min ago" },
+            { location: "Chennai", type: "medium", message: "Pothole detection on ECR stretch", time: "25 min ago" },
+            { location: "Guwahati", type: "high", message: "Landslide risk on hilly arterial road", time: "40 min ago" }
+        ];
+        
+        let map = null;
+        let markers = [];
+        let analysisInProgress = false;
+        
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initScrollReveal();
+            initCounters();
+            initMap();
+            initForm();
+            populateAlerts();
+            updateCoordsDisplay('chennai'); // Default selected
+        });
+        
+        // ==========================================
+        // CORE FUNCTIONS (Map, Reveal, Counters)
+        // ==========================================
+        
+        function initScrollReveal() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+            }, { threshold: 0.1 });
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        }
+        
+        function initCounters() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const target = parseInt(entry.target.dataset.count);
+                        animateCounter(entry.target, target);
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.5 });
+            document.querySelectorAll('[data-count]').forEach(c => observer.observe(c));
+        }
+        
+        function animateCounter(element, target) {
+            const duration = 2000;
+            const startTime = performance.now();
+            function update(currentTime) {
+                const progress = Math.min((currentTime - startTime) / duration, 1);
+                element.textContent = Math.floor(target * (1 - Math.pow(1 - progress, 4))).toLocaleString();
+                if (progress < 1) requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
+        }
+        
+        function initMap() {
+            // Center of India roughly
+            map = L.map('map', { center: [22.5937, 78.9629], zoom: 5, zoomControl: true });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19 }).addTo(map);
+            addMapMarkers();
+        }
+        
+        function addMapMarkers() {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            mapLocations.forEach(loc => {
+                const color = loc.risk === 'high' ? '#ef476f' : loc.risk === 'medium' ? '#ffd166' : '#06d6a0';
+                const icon = L.divIcon({ className: 'custom-marker', html: `<div style="width:20px;height:20px;background:${color};border-radius:50%;border:3px solid rgba(255,255,255,0.9);box-shadow:0 2px 10px rgba(0,0,0,0.5);"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+                const marker = L.marker([loc.lat, loc.lng], { icon: icon }).addTo(map).bindPopup(`<div style="font-family:Outfit,sans-serif;padding:8px;min-width:150px;"><h4 style="margin:0 0 6px;font-weight:600;">${loc.name}</h4><div style="display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${color}20;color:${color};">${loc.risk.toUpperCase()} RISK</div><p style="margin:8px 0 0;font-size:12px;color:#64748b;">Score: <strong style="color:${color}">${loc.score}</strong>/100</p></div>`);
+                markers.push(marker);
+            });
+        }
+        
+        function refreshMapData() {
+            mapLocations.forEach(loc => {
+                const change = Math.floor(Math.random() * 20) - 10;
+                loc.score = Math.max(5, Math.min(98, loc.score + change));
+                loc.risk = loc.score > 65 ? 'high' : loc.score > 35 ? 'medium' : 'low';
+            });
+            addMapMarkers();
+        }
+        
+        // ==========================================
+        // PREDICTION LOGIC
+        // ==========================================
+        
+        function initForm() {
+            const form = document.getElementById('location-form');
+            const citySelect = document.getElementById('city-select');
+            
+            citySelect.addEventListener('change', (e) => {
+                updateCoordsDisplay(e.target.value);
+                // Fly to city on map
+                const city = cityProfiles[e.target.value];
+                if (city && map) {
+                    map.flyTo([city.lat, city.lng], 10);
+                }
+            });
+            
+            form.addEventListener('submit', handleLocationSubmit);
+        }
+        
+        function updateCoordsDisplay(cityId) {
+            const city = cityProfiles[cityId];
+            if (city) {
+                document.getElementById('lat-input').value = city.lat.toFixed(4);
+                document.getElementById('lng-input').value = city.lng.toFixed(4);
+            }
+        }
+        
+        function handleLocationSubmit(e) {
+            e.preventDefault();
+            if (analysisInProgress) return;
+            analysisInProgress = true;
+            
+            const cityId = document.getElementById('city-select').value;
+            const city = cityProfiles[cityId];
+            
+            showAnalysisLoader(city.name);
+            
+            setTimeout(() => {
+                const detected = simulateDetection(city);
+                const result = calculateRisk(detected, city);
+                showResults(city, detected, result);
+                analysisInProgress = false;
+            }, 3000);
+        }
+        
+        function simulateDetection(city) {
+            // Bias detection based on city traits
+            let weather = "Clear";
+            let traffic = "Medium";
+            let roadCondition = "Good";
+            
+            // Weather Bias
+            if (city.traits.includes("rain") || city.traits.includes("flood")) weather = Math.random() > 0.4 ? "Rain" : "Storm";
+            else if (city.traits.includes("fog")) weather = Math.random() > 0.5 ? "Fog" : "Clear";
+            else if (city.traits.includes("heat")) weather = "Clear"; // Could be 'Heat' if we had it
+            else if (city.traits.includes("dust")) weather = Math.random() > 0.5 ? "Fog" : "Clear"; // Simulate dust as fog/haze
+            
+            // Traffic Bias
+            if (city.traits.includes("high_traffic")) traffic = Math.random() > 0.3 ? "High" : "Medium";
+            else if (city.traits.includes("moderate_traffic")) traffic = "Medium";
+            else traffic = Math.random() > 0.5 ? "Low" : "Medium";
+            
+            // Road Bias
+            if (city.traits.includes("potholes")) roadCondition = Math.random() > 0.4 ? "Potholes Present" : "Damaged";
+            else if (city.traits.includes("old_roads")) roadCondition = Math.random() > 0.5 ? "Damaged" : "Moderate";
+            else if (city.traits.includes("mixed_roads")) roadCondition = Math.random() > 0.5 ? "Moderate" : "Good";
+            else if (city.traits.includes("hilly")) roadCondition = Math.random() > 0.6 ? "Moderate" : "Damaged";
+            else roadCondition = Math.random() > 0.3 ? "Good" : "Moderate";
+            
+            // Special case for waterlogging
+            if (city.traits.includes("waterlogging") && weather === "Rain") roadCondition = "Waterlogged";
+            
+            return { weather, traffic, roadCondition };
+        }
+        
+        function calculateRisk(detected, city) {
+            const weights = { weather: { 'Clear': 0, 'Rain': 25, 'Fog': 15, 'Snow': 40, 'Storm': 45 }, traffic: { 'Low': 0, 'Medium': 15, 'High': 35 }, road: { 'Good': 0, 'Moderate': 15, 'Potholes Present': 30, 'Damaged': 40, 'Waterlogged': 45 } };
+            let score = 10 + (city.riskBias || 0);
+            score += weights.weather[detected.weather] || 0;
+            score += weights.traffic[detected.traffic] || 0;
+            score += weights.road[detected.roadCondition] || 0;
+            score += Math.floor(Math.random() * 10) - 5;
+            score = Math.max(5, Math.min(98, score));
+            
+            let level, color, colorHex;
+            if (score > 65) { level = 'High'; color = 'riskHigh'; colorHex = '#ef476f'; }
+            else if (score > 35) { level = 'Medium'; color = 'riskMedium'; colorHex = '#ffd166'; }
+            else { level = 'Low'; color = 'riskLow'; colorHex = '#06d6a0'; }
+            
+            return { score: Math.round(score), level, color, colorHex };
+        }
+        
+        function showAnalysisLoader(cityName) {
+            document.getElementById('results-panel').innerHTML = `<div class="text-center py-12"><div class="relative w-32 h-32 mx-auto mb-8"><div class="absolute inset-0 rounded-full border-4 border-border"></div><div class="absolute inset-0 rounded-full border-4 border-transparent border-t-accent animate-spin"></div><div class="absolute inset-4 rounded-full bg-card flex items-center justify-center"><svg class="w-10 h-10 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div></div><h3 class="font-display font-semibold text-xl mb-2">Analyzing ${cityName}</h3><p class="text-muted mb-6">AI is detecting regional conditions...</p><div class="space-y-3 max-w-xs mx-auto text-left"><div class="flex items-center gap-3 p-3 rounded-lg bg-bg/50 animate-pulse"><div class="w-5 h-5 rounded-full bg-border"></div><span class="text-sm text-muted">Processing satellite data...</span></div><div class="flex items-center gap-3 p-3 rounded-lg bg-bg/50 animate-pulse" style="animation-delay:0.5s"><div class="w-5 h-5 rounded-full bg-border"></div><span class="text-sm text-muted">Scanning traffic patterns...</span></div><div class="flex items-center gap-3 p-3 rounded-lg bg-bg/50 animate-pulse" style="animation-delay:1s"><div class="w-5 h-5 rounded-full bg-border"></div><span class="text-sm text-muted">Analyzing road surface...</span></div></div></div>`;
+        }
+        
+        function showResults(city, detected, result) {
+            const panel = document.getElementById('results-panel');
+            const weatherIcon = getWeatherIcon(detected.weather);
+            const trafficIcon = getTrafficIcon(detected.traffic);
+            const roadIcon = getRoadIcon(detected.roadCondition);
+            
+            const weatherColor = detected.weather === 'Clear' ? 'riskLow' : detected.weather === 'Storm' ? 'riskHigh' : 'riskMedium';
+            const trafficColor = detected.traffic === 'Low' ? 'riskLow' : detected.traffic === 'High' ? 'riskHigh' : 'riskMedium';
+            const roadColor = detected.roadCondition === 'Good' ? 'riskLow' : ['Potholes Present', 'Damaged', 'Waterlogged'].includes(detected.roadCondition) ? 'riskHigh' : 'riskMedium';
+            
+            const circumference = 2 * Math.PI * 85;
+            const dashArray = (result.score / 100) * circumference;
+            
+            let alertMessage = result.level === 'High' ? `Severe conditions detected in ${city.name}. Consider delaying travel.` : result.level === 'Medium' ? `Exercise caution while driving in ${city.name}.` : `Road conditions are safe in ${city.name}. Normal driving advised.`;
+            
+            panel.innerHTML = `<div class="grid md:grid-cols-2 gap-8"><div><div class="flex items-center gap-3 mb-6"><div class="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center"><svg class="w-6 h-6 text-bg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><div><h3 class="font-display font-semibold text-lg">${city.name}</h3><p class="text-sm text-muted">${city.state} - ${city.desc}</p></div></div><h4 class="font-medium text-muted mb-4 text-sm uppercase tracking-wider">AI Detected Conditions</h4><div class="space-y-3"><div class="detection-card detected flex items-center gap-4"><div class="w-12 h-12 rounded-xl bg-${weatherColor}/10 flex items-center justify-center flex-shrink-0">${weatherIcon}</div><div class="flex-1"><p class="text-xs text-muted uppercase tracking-wider mb-1">Weather Condition</p><p class="font-semibold text-lg text-${weatherColor}">${detected.weather}</p></div></div><div class="detection-card detected flex items-center gap-4"><div class="w-12 h-12 rounded-xl bg-${trafficColor}/10 flex items-center justify-center flex-shrink-0">${trafficIcon}</div><div class="flex-1"><p class="text-xs text-muted uppercase tracking-wider mb-1">Traffic Density</p><p class="font-semibold text-lg text-${trafficColor}">${detected.traffic}</p></div></div><div class="detection-card detected flex items-center gap-4"><div class="w-12 h-12 rounded-xl bg-${roadColor}/10 flex items-center justify-center flex-shrink-0">${roadIcon}</div><div class="flex-1"><p class="text-xs text-muted uppercase tracking-wider mb-1">Road Condition</p><p class="font-semibold text-lg text-${roadColor}">${detected.roadCondition}</p></div></div></div></div><div class="text-center"><div class="risk-gauge mx-auto mb-6"><svg viewBox="0 0 200 200" class="w-full h-full"><circle cx="100" cy="100" r="85" class="gauge-bg"/><circle cx="100" cy="100" r="85" class="gauge-fill" stroke="${result.colorHex}" stroke-dasharray="${dashArray} ${circumference}"/></svg><div class="absolute inset-0 flex flex-col items-center justify-center"><span class="text-5xl font-bold" style="color:${result.colorHex}">${result.score}</span><span class="text-lg text-muted">Risk Score</span></div></div><div class="inline-block px-6 py-3 rounded-xl bg-${result.color}/20 text-${result.color} font-bold text-xl mb-6">${result.level} Risk</div><div class="p-5 rounded-xl bg-${result.color}/10 border border-${result.color}/30 text-left"><div class="flex items-start gap-3"><svg class="w-6 h-6 flex-shrink-0 mt-0.5" style="color:${result.colorHex}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><div><p class="font-semibold mb-1" style="color:${result.colorHex}">Safety Advisory</p><p class="text-sm text-muted">${alertMessage}</p></div></div></div></div></div>`;
+        }
+        
+        // Icons & Helpers
+        function getWeatherIcon(w) { const i={Clear:'<svg class="w-6 h-6 text-riskLow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>',Rain:'<svg class="w-6 h-6 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>',Fog:'<svg class="w-6 h-6 text-riskMedium" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>',Storm:'<svg class="w-6 h-6 text-riskHigh" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>'}; return i[w]||i['Clear']; }
+        function getTrafficIcon(t) { const i={Low:'<svg class="w-6 h-6 text-riskLow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',Medium:'<svg class="w-6 h-6 text-riskMedium" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',High:'<svg class="w-6 h-6 text-riskHigh" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>'}; return i[t]||i['Low']; }
+        function getRoadIcon(r) { const i={Good:'<svg class="w-6 h-6 text-riskLow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',Moderate:'<svg class="w-6 h-6 text-riskMedium" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',"Potholes Present":'<svg class="w-6 h-6 text-riskHigh" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>',Damaged:'<svg class="w-6 h-6 text-riskHigh" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',Waterlogged:'<svg class="w-6 h-6 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>'}; return i[r]||i['Good']; }
+        
+        function populateAlerts() {
+            const list = document.getElementById('alerts-list');
+            let html = '';
+            recentAlerts.forEach(alert => {
+                const dotColor = alert.type === 'high' ? 'bg-riskHigh' : 'bg-riskMedium';
+                html += `<div class="flex items-start gap-4 p-4 rounded-xl bg-bg/50 hover:bg-bg transition-colors group"><div class="relative mt-1"><div class="w-3 h-3 rounded-full ${dotColor}"></div><div class="absolute inset-0 rounded-full ${dotColor} animate-ping opacity-30"></div></div><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1"><p class="font-semibold">${alert.location}</p><span class="text-xs text-muted">${alert.time}</span></div><p class="text-sm text-muted">${alert.message}</p></div></div>`;
+            });
+            list.innerHTML = html;
+        }
+        
+        function scrollToSection(id) { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); }
+    </script>
+</body>
+</html>
